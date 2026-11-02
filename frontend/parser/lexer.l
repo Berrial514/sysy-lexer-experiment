@@ -6,6 +6,7 @@
     #include <stdexcept>
     #include <string>
     #include <limits>      
+    #include <cctype>
     #include <cmath>       
 
     using namespace FE;
@@ -38,6 +39,16 @@
 %option noyywrap debug
 %option yyclass="Scanner"
 %option prefix="Yacc_"
+
+%x COMMENT
+
+DIGIT       [0-9]
+HEX         [0-9a-fA-F]
+EXP         [eE][+-]?{DIGIT}+
+P_EXP       [pP][+-]?{DIGIT}+
+DEC_FLOAT   (({DIGIT}+\.{DIGIT}*)|(\.{DIGIT}+))({EXP})?|{DIGIT}+{EXP}
+HEX_FLOAT   0[xX](({HEX}+\.{HEX}*)|(\.{HEX}+)){P_EXP}|0[xX]{HEX}+{P_EXP}
+IDENT       [A-Za-z_][A-Za-z0-9_]*
 
 %%
 
@@ -75,20 +86,52 @@ TODO(Lab1)：参考SysY2022的定义，实现更多的词法，如浮点数、�
 "return"            { RETT(RETURN, loc) }
 
 "const"             { RETT(CONST, loc) }
+"int"               { RETT(INT, loc) }
+"float"             { RETT(FLOAT, loc) }
+"void"              { RETT(VOID, loc) }
 
 ";"                 { RETT(SEMICOLON, loc) }
 ","                 { RETT(COMMA, loc) }
+
+"=="                { RETT(EQ, loc) }
+"!="                { RETT(NEQ, loc) }
+"<="                { RETT(LE, loc) }
+">="                { RETT(GE, loc) }
+"&&"                { RETT(AND, loc) }
+"||"                { RETT(OR, loc) }
+
+"!"                 { RETT(NOT, loc) }
+"|"                 { RETT(BITOR, loc) }
+"&"                 { RETT(BITAND, loc) }
+"."                 { RETT(DOT, loc) }
+"+"                 { RETT(PLUS, loc) }
+"-"                 { RETT(MINUS, loc) }
+"*"                 { RETT(STAR, loc) }
+"/"                 { RETT(SLASH, loc) }
+"%"                 { RETT(MOD, loc) }
+">"                 { RETT(GT, loc) }
+"<"                 { RETT(LT, loc) }
+"="                 { RETT(ASSIGN, loc) }
 
 "//".*              { 
     auto str = std::string(yytext);
     // return YaccParser::make_SLASH_COMMENT(str, loc);  //思考为什么要把这一行注释掉
 }
 
-"/*""*/" {
-    //TODO(Lab1)：实现多行注释的处理，包括修改上方的匹配规则
-}
+"/*"                { BEGIN(COMMENT); }
+<COMMENT>"*/"       { BEGIN(INITIAL); }
+<COMMENT>\n         {
+                        loc.lines(1);
+                        loc.step();
+                    }
+<COMMENT>.          { /* skip block-comment contents */ }
+<COMMENT><<EOF>>    {
+                        _parser.reportError(loc, "unterminated block comment");
+                        BEGIN(INITIAL);
+                        return YaccParser::make_ERR_TOKEN("unterminated block comment", loc);
+                    }
 
-[A-Za-z_]+[A-Za-z0-9_]* {
+{IDENT} {
     auto str = std::string(yytext);
     return YaccParser::make_IDENT(str, loc); 
 }
@@ -99,11 +142,31 @@ TODO(Lab1)：参考SysY2022的定义，实现更多的词法，如浮点数、�
     return YaccParser::make_STR_CONST(str, loc); 
 }
 
-[1-9][0-9]* {
+{HEX_FLOAT} {
+    try {
+        return YaccParser::make_FLOAT_CONST(convertToFloatHex(yytext), loc);
+    } catch (const std::exception& e) {
+        _parser.reportError(loc, std::string("Error parsing hexadecimal float: ") + e.what());
+        auto str = std::string(yytext);
+        return YaccParser::make_ERR_TOKEN(str, loc);
+    }
+}
+
+{DEC_FLOAT} {
+    try {
+        return YaccParser::make_FLOAT_CONST(convertToFloatDec(yytext), loc);
+    } catch (const std::exception& e) {
+        _parser.reportError(loc, std::string("Error parsing float: ") + e.what());
+        auto str = std::string(yytext);
+        return YaccParser::make_ERR_TOKEN(str, loc);
+    }
+}
+
+0[xX]{HEX}+|0[0-7]*|[1-9]{DIGIT}* {
     try {
         bool isLL = false;
         long long result = convertToInt(yytext, '\0', isLL);
-        // if (isLL) return YaccParser::make_LL_CONST(result, loc);
+        if (isLL) return YaccParser::make_LL_CONST(result, loc);
         return YaccParser::make_INT_CONST(static_cast<int>(result), loc);
     } catch (const std::exception& e) {
         _parser.reportError(loc, std::string("Error parsing hexadecimal int: ") + e.what());
@@ -112,12 +175,24 @@ TODO(Lab1)：参考SysY2022的定义，实现更多的词法，如浮点数、�
     }
 }
 
+0[0-9]+ {
+    _parser.reportError(loc, std::string("invalid octal integer: ") + yytext);
+    auto str = std::string(yytext);
+    return YaccParser::make_ERR_TOKEN(str, loc);
+}
+
 "("                 { RETT(LPAREN, loc) }
 ")"                 { RETT(RPAREN, loc) }
 "["                 { RETT(LBRACKET, loc) }
 "]"                 { RETT(RBRACKET, loc) }
 "{"                 { RETT(LBRACE, loc) }
 "}"                 { RETT(RBRACE, loc) }
+
+. {
+    _parser.reportError(loc, std::string("unrecognized character: ") + yytext);
+    auto str = std::string(yytext);
+    return YaccParser::make_ERR_TOKEN(str, loc);
+}
 
 <<EOF>>         { RETT(END, loc); }
 
