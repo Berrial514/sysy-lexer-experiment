@@ -123,6 +123,7 @@
 %start PROGRAM
 
 //THEN和ELSE用于处理if和else的移进-规约冲突
+%right ASSIGN
 %precedence THEN
 %precedence ELSE
 // token 定义结束
@@ -305,7 +306,9 @@ INITIALIZER_LIST:
     ;
 
 ASSIGN_EXPR:
-    // TODO(Lab2): 完成赋值表达式的处理
+    LEFT_VAL_EXPR ASSIGN NOCOMMA_EXPR {
+        $$ = new BinaryExpr(Operator::ASSIGN, $1, $3, @2.begin.line, @2.begin.column);
+    }
     ;
 
 EXPR_LIST:
@@ -347,27 +350,78 @@ NOCOMMA_EXPR:
     ;
 
 LOGICAL_OR_EXPR:
-    /* TODO(Lab2): Implement logical OR expression rule */
+    LOGICAL_AND_EXPR {
+        $$ = $1;
+    }
+    | LOGICAL_OR_EXPR OR LOGICAL_AND_EXPR {
+        $$ = new BinaryExpr(Operator::OR, $1, $3, @2.begin.line, @2.begin.column);
+    }
     ;
 
 LOGICAL_AND_EXPR:
-    /* TODO(Lab2): Implement logical AND expression rule */
+    EQUALITY_EXPR {
+        $$ = $1;
+    }
+    | LOGICAL_AND_EXPR AND EQUALITY_EXPR {
+        $$ = new BinaryExpr(Operator::AND, $1, $3, @2.begin.line, @2.begin.column);
+    }
     ;
 
 EQUALITY_EXPR:
-    /* TODO(Lab2): Implement equality expression rule */
+    RELATIONAL_EXPR {
+        $$ = $1;
+    }
+    | EQUALITY_EXPR EQ RELATIONAL_EXPR {
+        $$ = new BinaryExpr(Operator::EQ, $1, $3, @2.begin.line, @2.begin.column);
+    }
+    | EQUALITY_EXPR NEQ RELATIONAL_EXPR {
+        $$ = new BinaryExpr(Operator::NEQ, $1, $3, @2.begin.line, @2.begin.column);
+    }
     ;
 
 RELATIONAL_EXPR:
-    /* TODO(Lab2): Implement relational expression rule */
+    ADDSUB_EXPR {
+        $$ = $1;
+    }
+    | RELATIONAL_EXPR GT ADDSUB_EXPR {
+        $$ = new BinaryExpr(Operator::GT, $1, $3, @2.begin.line, @2.begin.column);
+    }
+    | RELATIONAL_EXPR GE ADDSUB_EXPR {
+        $$ = new BinaryExpr(Operator::GE, $1, $3, @2.begin.line, @2.begin.column);
+    }
+    | RELATIONAL_EXPR LT ADDSUB_EXPR {
+        $$ = new BinaryExpr(Operator::LT, $1, $3, @2.begin.line, @2.begin.column);
+    }
+    | RELATIONAL_EXPR LE ADDSUB_EXPR {
+        $$ = new BinaryExpr(Operator::LE, $1, $3, @2.begin.line, @2.begin.column);
+    }
     ;
 
 ADDSUB_EXPR:
-    /* TODO(Lab2): Implement addition and subtraction expression rule */
+    MULDIV_EXPR {
+        $$ = $1;
+    }
+    | ADDSUB_EXPR PLUS MULDIV_EXPR {
+        $$ = new BinaryExpr(Operator::ADD, $1, $3, @2.begin.line, @2.begin.column);
+    }
+    | ADDSUB_EXPR MINUS MULDIV_EXPR {
+        $$ = new BinaryExpr(Operator::SUB, $1, $3, @2.begin.line, @2.begin.column);
+    }
     ;
 
 MULDIV_EXPR:
-    /* TODO(Lab2): Implement multiplication and division expression rule */
+    UNARY_EXPR {
+        $$ = $1;
+    }
+    | MULDIV_EXPR STAR UNARY_EXPR {
+        $$ = new BinaryExpr(Operator::MUL, $1, $3, @2.begin.line, @2.begin.column);
+    }
+    | MULDIV_EXPR SLASH UNARY_EXPR {
+        $$ = new BinaryExpr(Operator::DIV, $1, $3, @2.begin.line, @2.begin.column);
+    }
+    | MULDIV_EXPR MOD UNARY_EXPR {
+        $$ = new BinaryExpr(Operator::MOD, $1, $3, @2.begin.line, @2.begin.column);
+    }
     ;
 
 UNARY_EXPR:
@@ -383,7 +437,7 @@ BASIC_EXPR:
     LITERAL_EXPR {
         $$ = $1;
     }
-    | LEFT_VAL_EXPR {
+    | LEFT_VAL_EXPR %prec ASSIGN {
         $$ = $1;
     }
     | LPAREN EXPR RPAREN {
@@ -423,7 +477,14 @@ ARRAY_DIMENSION_EXPR:
     ;
 
 ARRAY_DIMENSION_EXPR_LIST:
-    /* TODO(Lab2): Implement variable dimension rule */
+    ARRAY_DIMENSION_EXPR {
+        $$ = new std::vector<ExprNode*>();
+        $$->push_back($1);
+    }
+    | ARRAY_DIMENSION_EXPR_LIST ARRAY_DIMENSION_EXPR {
+        $$ = $1;
+        $$->push_back($2);
+    }
     ;
 
 LEFT_VAL_EXPR:
@@ -441,15 +502,36 @@ LITERAL_EXPR:
     INT_CONST {
         $$ = new LiteralExpr($1, @1.begin.line, @1.begin.column);
     }
-    //TODO(Lab2): 处理更多字面量
+    | LL_CONST {
+        $$ = new LiteralExpr($1, @1.begin.line, @1.begin.column);
+    }
+    | FLOAT_CONST {
+        $$ = new LiteralExpr($1, @1.begin.line, @1.begin.column);
+    }
     ;
 
 TYPE:
-    // TODO(Lab2): 完成类型的处理
+    INT {
+        $$ = intType;
+    }
+    | FLOAT {
+        $$ = floatType;
+    }
+    | VOID {
+        $$ = voidType;
+    }
     ;
 
 UNARY_OP:
-    // TODO(Lab2): 完成一元运算符的处理
+    PLUS {
+        $$ = Operator::ADD;
+    }
+    | MINUS {
+        $$ = Operator::SUB;
+    }
+    | NOT {
+        $$ = Operator::NOT;
+    }
     ;
 
 %%
