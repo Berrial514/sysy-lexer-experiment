@@ -182,6 +182,18 @@ STMT:
     | SLASH_COMMENT {
         $$ = nullptr;
     }
+    | WHILE_STMT {
+        $$ = $1;
+    }
+    | RETURN_STMT {
+        $$ = $1;
+    }
+    | BREAK_STMT {
+        $$ = $1;
+    }
+    | BLOCK_STMT {
+        $$ = $1;
+    }
     //TODO(Lab2)：考虑更多语句类型
     ;
 
@@ -207,7 +219,9 @@ VAR_DECLARATION:
     ;
 
 VAR_DECL_STMT:
-    /* TODO(Lab2): Implement variable declaration statement rule */
+    VAR_DECLARATION SEMICOLON {
+        $$ = new VarDeclStmt($1, @1.begin.line, @1.begin.column);
+    }
     ;
 
 FUNC_BODY:
@@ -248,11 +262,45 @@ FOR_STMT:
     ;
 
 IF_STMT:
-    /* TODO(Lab2): Implement if statement rule */
+    IF LPAREN EXPR RPAREN STMT %prec THEN {
+        $$ = new IfStmt($3, $5, nullptr, @1.begin.line, @1.begin.column);
+    }
+    | IF LPAREN EXPR RPAREN STMT ELSE STMT {
+        $$ = new IfStmt($3, $5, $7, @1.begin.line, @1.begin.column);
+    }
     ;
 
 //TODO(Lab2)：按照你补充的语句类型，实现这些语句的处理
 
+WHILE_STMT:
+    WHILE LPAREN EXPR RPAREN STMT {
+        $$ = new WhileStmt($3, $5, @1.begin.line, @1.begin.column);
+    }
+    ;
+
+RETURN_STMT:
+    RETURN SEMICOLON {
+        $$ = new ReturnStmt(nullptr, @1.begin.line, @1.begin.column);
+    }
+    | RETURN EXPR SEMICOLON {
+        $$ = new ReturnStmt($2, @1.begin.line, @1.begin.column);
+    }
+    ;
+
+BREAK_STMT:
+    BREAK SEMICOLON {
+        $$ = new BreakStmt(@1.begin.line, @1.begin.column);
+    }
+    ;
+
+BLOCK_STMT:
+    LBRACE RBRACE {
+        $$ = new BlockStmt(new std::vector<StmtNode*>(), @1.begin.line, @1.begin.column);
+    }
+    | LBRACE STMT_LIST RBRACE {
+        $$ = new BlockStmt($2, @1.begin.line, @1.begin.column);
+    }
+    ;
 
 PARAM_DECLARATOR:
     TYPE IDENT {
@@ -265,6 +313,12 @@ PARAM_DECLARATOR:
         Entry* entry = Entry::getEntry($2);
         $$ = new ParamDeclarator($1, entry, dim, @1.begin.line, @1.begin.column);
     }
+    | TYPE IDENT LBRACKET INT_CONST RBRACKET {
+        std::vector<ExprNode*>* dim = new std::vector<ExprNode*>();
+        dim->emplace_back(new LiteralExpr($4, @4.begin.line, @4.begin.column));
+        Entry* entry = Entry::getEntry($2);
+        $$ = new ParamDeclarator($1, entry, dim, @1.begin.line, @1.begin.column);
+    }
     //TODO(Lab2)：考虑函数形参更多情况
     ;
 
@@ -272,11 +326,38 @@ PARAM_DECLARATOR_LIST:
     /* empty */ {
         $$ = new std::vector<ParamDeclarator*>();
     }
+    | PARAM_DECLARATOR {
+        $$ = new std::vector<ParamDeclarator*>();
+        $$->push_back($1);
+    }
+    | PARAM_DECLARATOR_LIST COMMA PARAM_DECLARATOR {
+        $$ = $1;
+        $$->push_back($3);
+    }
     //TODO(Lab2)：考虑函数形参列表的构成情况
     ;
 
 VAR_DECLARATOR:
-    //TODO(Lab2)：完成变量声明符的处理
+    IDENT {
+        Entry* entry = Entry::getEntry($1);
+        $$ = new VarDeclarator(
+            new LeftValExpr(entry, nullptr, @1.begin.line, @1.begin.column), nullptr, @1.begin.line, @1.begin.column);
+    }
+    | IDENT ARRAY_DIMENSION_EXPR_LIST {
+        Entry* entry = Entry::getEntry($1);
+        $$ = new VarDeclarator(
+            new LeftValExpr(entry, $2, @1.begin.line, @1.begin.column), nullptr, @1.begin.line, @1.begin.column);
+    }
+    | IDENT ASSIGN INITIALIZER {
+        Entry* entry = Entry::getEntry($1);
+        $$ = new VarDeclarator(
+            new LeftValExpr(entry, nullptr, @1.begin.line, @1.begin.column), $3, @1.begin.line, @1.begin.column);
+    }
+    | IDENT ARRAY_DIMENSION_EXPR_LIST ASSIGN INITIALIZER {
+        Entry* entry = Entry::getEntry($1);
+        $$ = new VarDeclarator(
+            new LeftValExpr(entry, $2, @1.begin.line, @1.begin.column), $4, @1.begin.line, @1.begin.column);
+    }
     ;
 
 VAR_DECLARATOR_LIST:
@@ -291,7 +372,15 @@ VAR_DECLARATOR_LIST:
     ;
 
 INITIALIZER:
-    /* TODO(Lab2): Implement variable initializer rule */
+    NOCOMMA_EXPR {
+        $$ = new Initializer($1, @1.begin.line, @1.begin.column);
+    }
+    | LBRACE RBRACE {
+        $$ = new InitializerList(new std::vector<InitDecl*>(), @1.begin.line, @1.begin.column);
+    }
+    | LBRACE INITIALIZER_LIST RBRACE {
+        $$ = new InitializerList($2, @1.begin.line, @1.begin.column);
+    }
     ;
 
 INITIALIZER_LIST:
